@@ -1,0 +1,16 @@
+pngscale is a specialized tool for scaling down of PNG files to create
+thumbnails. It works scanline by scanline, so it's memory-efficient
+even on extremely large PNG images, taking only about 11 MB of RAM in
+experiments. It is also faster than ImageMagick convert, particularly
+on large images, running about twice as fast on a 50 megapixel file.
+
+It produces 24-bpp RGB thumbnails of palettized and 16-bit images and
+8-bpp grayscale thumbnails of grayscale images. It has not been tested
+with progressive or interlaced images, and cannot upscale images.
+Error messages are currently English-only.
+
+pngscale is produced by Derrick Coetzee and released under the MIT/X11
+license, which permits any use commercial or noncommercial as long as
+the license statement is retained. It is based on a sample by
+Guillaume Cottenceau and contributors released under the MIT/X11
+license at http://zarb.org/~gc/html/libpng.html

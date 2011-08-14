@@ -1,0 +1,11 @@
+ferriero.png is by the author (Derrick Coetzee) and released under CC0 waiver at:
+
+http://commons.wikimedia.org/wiki/File:David_Ferriero_giving_opening_address_at_2011_Wikipedia_in_Higher_Education_Summit_%281%29.jpg
+
+ferriero_*.png are derived from ferriero.png in Photoshop by Derrick Coetzee and also released under CC0 waiver.
+
+antonio.png is a scan of a public domain work and is from:
+
+http://commons.wikimedia.org/wiki/File:Antonio_da_Trento_-_The_Tiburtine_sibyl_and_the_Emperor_Augustus_original_LOC.png
+
+It's an example of an existing file Wikimedia Commons cannot thumbnail due to its large size (50 megapixels).
