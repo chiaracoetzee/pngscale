@@ -24,7 +24,7 @@
 
 CC=gcc
 #CFLAGS=-Wall -ggdb
-CFLAGS=-O3
+CFLAGS=-Wall -O3
 
 all: pngscale
 

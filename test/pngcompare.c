@@ -77,9 +77,15 @@ uint64_t squared_difference(struct png_info read_1, struct png_info read_2)
         for (x=0; x < read_1.width; x++) {
             png_byte* read_ptr_1 = &(read_row_pointer_1[x*channels_per_pixel_1]);
             png_byte* read_ptr_2 = &(read_row_pointer_2[x*channels_per_pixel_2]);
-            for (c=0; c < channels_per_pixel_1; c++) {
-                int diff = read_ptr_1[c] - read_ptr_2[c];
+            if (channels_per_pixel_1 == 4 && (read_ptr_1[3] == 0 || read_ptr_2[3] == 0)) {
+                /* If one of them is fully transparent, assume RGB channels match */
+                int diff = read_ptr_1[3] - read_ptr_2[3];
                 result += diff*diff;
+            } else {
+                for (c=0; c < channels_per_pixel_1; c++) {
+                    int diff = read_ptr_1[c] - read_ptr_2[c];
+                    result += diff*diff;
+                }
             }
         }
     }

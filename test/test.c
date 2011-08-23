@@ -26,6 +26,7 @@ under MIT/X11 License at http://zarb.org/~gc/html/libpng.html
 #include "pngcompare.h"
 #include "../utils.h"
 
+#include <unistd.h>
 #include <stdlib.h>
 #include <stdio.h>
 
@@ -63,6 +64,18 @@ void test_basic(const char* filename, int max_width) {
 int main(void) {
     int i;
     int sizes[] = { 1, 50, 150, 200, 220, 300, 400, 1000 };
+
+    /* Transparency */
+#if 0
+    /* Currently failing - our processing near edges for images with
+       transparent pixels is not quite right. The colour of pixels
+       with alpha=0 should not influence the output pixel colour.
+       The visual effect of this is very subtle.
+    */
+    test_basic("test/data/Abrams-transparent.png", 220);
+    test_basic("test/data/Abrams-transparent_palette_256.png", 220);
+#endif
+
     for (i=0; i < sizeof(sizes)/sizeof(*sizes); i++) {
         test_basic("test/data/ferriero.png", sizes[i]);
         test_basic("test/data/antonio.png", sizes[i]);
@@ -80,7 +93,6 @@ int main(void) {
     test_basic("test/data/ferriero_palette_64.png", 220);
     test_basic("test/data/ferriero_palette_128.png", 220);
     test_basic("test/data/ferriero_palette_256.png", 220);
-    test_basic("test/data/antonio_large.png", 220);
 
 #if 0
     /* Commented out - passes but really slow */
