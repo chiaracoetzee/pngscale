@@ -60,6 +60,7 @@ void test_basic(const char* filename, int max_width, double max_error) {
 int main(void) {
     int i;
     int sizes[] = { 1, 50, 150, 200, 220, 300, 400, 1000 };
+
     for (i=0; i < sizeof(sizes)/sizeof(*sizes); i++) {
         test_basic("test/data/ferriero.png", sizes[i], 5.0);
         test_basic("test/data/antonio.png", sizes[i], 5.0);
@@ -91,6 +92,7 @@ int main(void) {
     /* Transparency */
     test_basic("test/data/Abrams-transparent.png", 220, 6.0);
     test_basic("test/data/Abrams-transparent_palette_256.png", 220, 5.0);
+    test_basic("test/data/translucent_circle.png", 220, 5.0);
 
     unlink("/tmp/out.pngscale.png");
     unlink("/tmp/out.convert.png");
