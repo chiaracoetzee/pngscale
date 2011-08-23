@@ -59,10 +59,14 @@ void scale_png_down(struct png_info read, struct png_info write)
     if (!write_row_pointer) {
         abort_("Failed to allocate memory to hold one row of output PNG image");
     }
-    uint64_t read_area = ((uint64_t)read.width) * read.height;
+    /* uint64_t read_area = ((uint64_t)read.width) * read.height; */
+    uint64_t* read_areas = (uint64_t*) malloc(sizeof(uint64_t) * write.width * write.channels);
+    uint64_t* read_areas_next_row = (uint64_t*) malloc(sizeof(uint64_t) * write.width * write.channels);
     
     memset(write_row_sums_pointer, 0, sizeof(uint64_t) * write.width * write.channels);
     memset(write_next_row_sums_pointer, 0, sizeof(uint64_t) * write.width * write.channels);
+    memset(read_areas, 0, sizeof(uint64_t) * write.width * write.channels);
+    memset(read_areas_next_row, 0, sizeof(uint64_t) * write.width * write.channels);
     int y_frac = 0;
     for (y=0; y < read.height; y++) {
         png_read_row(read.png_ptr, read_row_pointer, NULL);
@@ -96,21 +100,31 @@ void scale_png_down(struct png_info read, struct png_info write)
 
             png_byte* read_ptr = &(read_row_pointer[x*read.channels]);
             for (c=0; c < write.channels; c++) {
+                uint64_t value = read_ptr[c];
+                uint64_t alpha = 255;
+                if (read.channels >= 4 && c < 3) {
+                    alpha = read_ptr[3];
+                }
                 write_row_sums_pointer[write.channels*write_x + c] +=
-                    read_ptr[c] * fraction_in_current_col * fraction_in_current_row;
+                    value * fraction_in_current_col * fraction_in_current_row * alpha / 255;
+                read_areas[write.channels*write_x + c] += fraction_in_current_col * fraction_in_current_row * alpha / 255;
                 if (fraction_in_next_col) {
                     write_row_sums_pointer[write.channels*(write_x + 1) + c] +=
-                        read_ptr[c] * fraction_in_next_col * fraction_in_current_row;
+                        value * fraction_in_next_col * fraction_in_current_row * alpha / 255;
+                    read_areas[write.channels*(write_x + 1) + c] += fraction_in_next_col * fraction_in_current_row * alpha / 255;
                 }
                 if (fraction_in_next_row) {
                     write_next_row_sums_pointer[write.channels*write_x + c] +=
-                        read_ptr[c] * fraction_in_current_col * fraction_in_next_row;
+                        value * fraction_in_current_col * fraction_in_next_row * alpha / 255;
+                    read_areas_next_row[write.channels*write_x + c] += fraction_in_current_col * fraction_in_next_row * alpha / 255;
                 }
                 if (fraction_in_next_col && fraction_in_next_row) {
                     write_next_row_sums_pointer[write.channels*(write_x + 1) + c] +=
-                        read_ptr[c] * fraction_in_next_col * fraction_in_next_row;
+                        value * fraction_in_next_col * fraction_in_next_row * alpha / 255;
+                    read_areas_next_row[write.channels*(write_x + 1) + c] += fraction_in_next_col * fraction_in_next_row * alpha / 255;
                 }
             }
+
             if (end_of_col) {
                 write_x++;
                 assert (write_x < write.width || x == read.width - 1);
@@ -121,14 +135,22 @@ void scale_png_down(struct png_info read, struct png_info write)
             for (x=0; x < write.width; x++) {
                 png_byte* write_ptr = &(write_row_pointer[x*write.channels]);
                 uint64_t* write_sums_ptr = &(write_row_sums_pointer[x*write.channels]);
+                uint64_t* read_areas_ptr = &(read_areas[x*write.channels]);
                 for (c=0; c < write.channels; c++) {
-                    write_ptr[c] = ROUND_DIV(write_sums_ptr[c], read_area);
+                    if (read_areas_ptr[c] == 0) {
+                        /* Fully transparent pixel, value is irrelevant */
+                        write_ptr[c] = 0;
+                    } else {
+                        write_ptr[c] = ROUND_DIV(write_sums_ptr[c], read_areas_ptr[c]);
+                    }
                 }
             }
 
             png_write_row(write.png_ptr, write_row_pointer);
             SWAP(write_row_sums_pointer, write_next_row_sums_pointer, uint64_t*);
             memset(write_next_row_sums_pointer, 0, sizeof(uint64_t) * write.width * write.channels);
+            SWAP(read_areas, read_areas_next_row, uint64_t*);
+            memset(read_areas_next_row, 0, sizeof(uint64_t) * write.width * write.channels);
         }
     }
 

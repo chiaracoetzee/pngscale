@@ -37,72 +37,61 @@ void sys(const char* command) {
     }
 }
 
-void assert_png_approx_equal(const char* filename_1, const char* filename_2) {
-    static double threshold = 5;
+void assert_png_approx_equal(const char* filename_1, const char* filename_2, double max_error) {
     double difference = png_compare(filename_1, filename_2);
-    if (difference > threshold) {
-        abort_("Scaled output files '%s' and '%s' were too different (distance=%f, threshold=%f).", filename_1, filename_2, difference, threshold);
+    if (difference > max_error) {
+        abort_("Scaled output files '%s' and '%s' were too different (distance=%f, threshold=%f).", filename_1, filename_2, difference, max_error);
     }
 }
 
-void test_success(void) {
-    printf(".");
+void test_basic(const char* filename, int max_width, double max_error) {
+    printf("Testing %s at %dpx...", filename, max_width);
     fflush(stdout);
-}
-
-void test_basic(const char* filename, int max_width) {
     char buffer[256];
     snprintf(buffer, sizeof(buffer), "./pngscale %s /tmp/out.pngscale.png %d -1", filename, max_width);
     sys(buffer);
     /* Requires ImageMagick convert */
     snprintf(buffer, sizeof(buffer), "convert %s -resize %d /tmp/out.convert.png", filename, max_width);
     sys(buffer);
-    assert_png_approx_equal("/tmp/out.pngscale.png", "/tmp/out.convert.png");
-    test_success();
+    assert_png_approx_equal("/tmp/out.pngscale.png", "/tmp/out.convert.png", max_error);
+    printf("\n");
 }
 
 int main(void) {
     int i;
     int sizes[] = { 1, 50, 150, 200, 220, 300, 400, 1000 };
-
-    /* Transparency */
-#if 0
-    /* Currently failing - our processing near edges for images with
-       transparent pixels is not quite right. The colour of pixels
-       with alpha=0 should not influence the output pixel colour.
-       The visual effect of this is very subtle.
-    */
-    test_basic("test/data/Abrams-transparent.png", 220);
-    test_basic("test/data/Abrams-transparent_palette_256.png", 220);
-#endif
-
     for (i=0; i < sizeof(sizes)/sizeof(*sizes); i++) {
-        test_basic("test/data/ferriero.png", sizes[i]);
-        test_basic("test/data/antonio.png", sizes[i]);
+        test_basic("test/data/ferriero.png", sizes[i], 5.0);
+        test_basic("test/data/antonio.png", sizes[i], 5.0);
     }
+    test_basic("test/data/antonio.png", 5000, 5.0);
 
     /* Different color types and bit depths */
-    test_basic("test/data/ferriero_gray.png", 220);
-    test_basic("test/data/ferriero_16bit.png", 220);
-    test_basic("test/data/ferriero_palette_bw.png", 220);
-    test_basic("test/data/ferriero_palette_2.png", 220);
-    test_basic("test/data/ferriero_palette_4.png", 220);
-    test_basic("test/data/ferriero_palette_8.png", 220);
-    test_basic("test/data/ferriero_palette_16.png", 220);
-    test_basic("test/data/ferriero_palette_32.png", 220);
-    test_basic("test/data/ferriero_palette_64.png", 220);
-    test_basic("test/data/ferriero_palette_128.png", 220);
-    test_basic("test/data/ferriero_palette_256.png", 220);
+    test_basic("test/data/ferriero_gray.png", 220, 5.0);
+    test_basic("test/data/ferriero_16bit.png", 220, 5.0);
+    test_basic("test/data/ferriero_palette_bw.png", 220, 5.0);
+    test_basic("test/data/ferriero_palette_2.png", 220, 5.0);
+    test_basic("test/data/ferriero_palette_4.png", 220, 5.0);
+    test_basic("test/data/ferriero_palette_8.png", 220, 5.0);
+    test_basic("test/data/ferriero_palette_16.png", 220, 5.0);
+    test_basic("test/data/ferriero_palette_32.png", 220, 5.0);
+    test_basic("test/data/ferriero_palette_64.png", 220, 5.0);
+    test_basic("test/data/ferriero_palette_128.png", 220, 5.0);
+    test_basic("test/data/ferriero_palette_256.png", 220, 5.0);
 
 #if 0
     /* Commented out - passes but really slow */
     printf("Creating /tmp/antonio_large.png...\n");
     sys("convert test/data/antonio.png -resize 19203 /tmp/antonio-large.png");
     printf("Doing large image test...\n");
-    test_basic("/tmp/antonio_large.png", 220);
+    test_basic("/tmp/antonio_large.png", 220, 5.0);
     unlink("/tmp/antonio_large.png");
 #endif
-    
+
+    /* Transparency */
+    test_basic("test/data/Abrams-transparent.png", 220, 6.0);
+    test_basic("test/data/Abrams-transparent_palette_256.png", 220, 5.0);
+
     unlink("/tmp/out.pngscale.png");
     unlink("/tmp/out.convert.png");
 
