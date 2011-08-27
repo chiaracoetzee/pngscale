@@ -37,9 +37,77 @@ under MIT/X11 License at http://zarb.org/~gc/html/libpng.html
 #define ROUND_DIV(x,y) (((x) + (y)/2)/(y))
 #define SWAP(x,y,type)  do { type temp = x; x = y; y = temp; } while(0)
 
+static void scale_png_up(struct png_info read, struct png_info write);
 static void scale_png_down(struct png_info read, struct png_info write);
 static struct png_info compute_write_info(struct png_info read, int max_width, int max_height);
 int main(int argc, char **argv);
+
+void scale_png_up(struct png_info read, struct png_info write)
+{
+    int x, y, c;
+
+    /* Read and write pixels */
+    png_bytep read_row_pointer = (png_byte*) malloc(read.rowbytes);
+    png_bytep read_next_row_pointer = (png_byte*) malloc(read.rowbytes);
+    if (!read_row_pointer || !read_next_row_pointer) {
+        abort_("Failed to allocate memory to hold two rows of input PNG image");
+    }
+    png_bytep write_row_pointer = (png_byte*) malloc(write.rowbytes);
+    if (!write_row_pointer) {
+        abort_("Failed to allocate memory to hold one row of output PNG image");
+    }
+    
+    if (read.height == 1) {
+        abort_("Not yet handling upscaling of images one pixel high");
+    }
+
+    /* Using floating point in this procedure because performance isn't a
+       concern - upscaling is rare and generally involves small images. */
+    png_read_row(read.png_ptr, read_row_pointer, NULL);
+    png_read_row(read.png_ptr, read_next_row_pointer, NULL);
+    /* Subtracting 1 because our read pixels are conceptually being
+       sampled at the upper-left corner of each pixel, so the bottom-
+       right corners have no value. */
+    double x_scale = (double)write.width / (read.width - 1); 
+    double y_scale = (double)write.height / (read.height - 1);
+    double int_part_y = 0.0;
+    for (y=0; y < write.height; y++) {
+        double old_int_part_y = int_part_y;
+        double fraction_from_above_row = 1.0 - modf(y/y_scale, &int_part_y);
+        double fraction_from_below_row = 1.0 - fraction_from_above_row;
+        if (int_part_y != old_int_part_y) {
+            int i;
+            for (i=0; i < int_part_y - old_int_part_y; i++) {
+                SWAP(read_row_pointer, read_next_row_pointer, png_bytep);
+                png_read_row(read.png_ptr, read_next_row_pointer, NULL);
+            }
+        }
+        for (x=0; x < write.width; x++) {
+            double read_x_dbl;
+            double fraction_from_left_col = 1.0 - modf(x/x_scale, &read_x_dbl);
+            int read_x = (int)read_x_dbl;
+            double fraction_from_right_col = 1.0 - fraction_from_left_col;
+
+            png_byte* read_above_left_ptr = &(read_row_pointer[read_x*read.channels]);
+            png_byte* read_below_left_ptr = &(read_next_row_pointer[read_x*read.channels]);
+            png_byte* read_above_right_ptr = &(read_row_pointer[(read_x + 1)*read.channels]);
+            png_byte* read_below_right_ptr = &(read_next_row_pointer[(read_x + 1)*read.channels]);
+            png_byte* write_ptr = &(write_row_pointer[x*write.channels]);
+            for (c=0; c < write.channels; c++) {
+                double val = read_above_left_ptr[c]  * fraction_from_above_row * fraction_from_left_col + 
+                             read_above_right_ptr[c] * fraction_from_above_row * fraction_from_right_col + 
+                             read_below_left_ptr[c]  * fraction_from_below_row * fraction_from_left_col + 
+                             read_below_right_ptr[c] * fraction_from_below_row * fraction_from_right_col;
+                write_ptr[c] = (int)round(val);
+            }
+        }
+
+        png_write_row(write.png_ptr, write_row_pointer);
+    }
+
+    close_read_png(read);
+    close_write_png(write);
+}
 
 void scale_png_down(struct png_info read, struct png_info write)
 {
@@ -50,18 +118,19 @@ void scale_png_down(struct png_info read, struct png_info write)
     if (!read_row_pointer) {
         abort_("Failed to allocate memory to hold one row of input PNG image");
     }
+
     uint64_t* write_row_sums_pointer = (uint64_t*) malloc(sizeof(uint64_t) * write.width * write.channels);
     uint64_t* write_next_row_sums_pointer = (uint64_t*) malloc(sizeof(uint64_t) * write.width * write.channels);
-    if (!write_row_sums_pointer || !write_next_row_sums_pointer) {
-        abort_("Failed to allocate memory - need enough to hold five rows of output PNG image");
+    uint64_t* read_areas = (uint64_t*) malloc(sizeof(uint64_t) * write.width * write.channels);
+    uint64_t* read_areas_next_row = (uint64_t*) malloc(sizeof(uint64_t) * write.width * write.channels);
+    if (!write_row_sums_pointer || !write_next_row_sums_pointer || !read_areas || !read_areas_next_row) {
+        abort_("Failed to allocate memory - need enough to hold nine rows of output PNG image");
     }
+
     png_bytep write_row_pointer = (png_byte*) malloc(write.rowbytes);
     if (!write_row_pointer) {
         abort_("Failed to allocate memory to hold one row of output PNG image");
     }
-    /* uint64_t read_area = ((uint64_t)read.width) * read.height; */
-    uint64_t* read_areas = (uint64_t*) malloc(sizeof(uint64_t) * write.width * write.channels);
-    uint64_t* read_areas_next_row = (uint64_t*) malloc(sizeof(uint64_t) * write.width * write.channels);
     
     memset(write_row_sums_pointer, 0, sizeof(uint64_t) * write.width * write.channels);
     memset(write_next_row_sums_pointer, 0, sizeof(uint64_t) * write.width * write.channels);
@@ -162,14 +231,6 @@ struct png_info compute_write_info(struct png_info read, int width, int height)
 {
     struct png_info write;
 
-    /* Can only downscale currently */
-    if (width > read.width) {
-        width = read.width;
-    }
-    if (height > read.height) {
-        height = read.height;
-    }
-
     /* If either width or height is -1, user is requesting
        us to preserve the aspect ratio:
 
@@ -205,8 +266,9 @@ struct png_info compute_write_info(struct png_info read, int width, int height)
 int main(int argc, char **argv)
 {
     if (argc != 5) {
-        abort_("Usage: program_name <file_in> <file_out> <width px> <height px>\n"
+        printf("Usage: pngscale <input file> <output file> <width px> <height px>\n"
                "Set either width or height to -1 to choose other to preserve aspect ratio.\n");
+        return 1;
     }
 
     int width = atoi(argv[3]);
@@ -215,7 +277,11 @@ int main(int argc, char **argv)
     struct png_info read = open_read_png(argv[1]);
     struct png_info write = compute_write_info(read, width, height);
     open_write_png(argv[2], &write);
-    scale_png_down(read, write);
+    if (write.width > read.width || write.height > read.height) {
+        scale_png_up(read, write);
+    } else {
+        scale_png_down(read, write);
+    }
 
     return 0;
 }

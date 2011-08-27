@@ -24,6 +24,9 @@
 
 all: test/test
 
+run_tests:
+	test/test
+
 test/clean:
 	rm -f test/test $(TEST_OBJS)
 
