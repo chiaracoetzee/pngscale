@@ -158,29 +158,39 @@ void scale_png_down(struct png_info read, struct png_info write)
     close_write_png(write);
 }
 
-struct png_info compute_write_info(struct png_info read, int max_width, int max_height)
+struct png_info compute_write_info(struct png_info read, int width, int height)
 {
     struct png_info write;
 
     /* Can only downscale currently */
-    if (max_width > read.width) {
-        max_width = read.width;
+    if (width > read.width) {
+        width = read.width;
     }
-    if (max_height > read.height) {
-        max_height = read.height;
+    if (height > read.height) {
+        height = read.height;
     }
 
-    /* Set write.width, write.height so that:
-         1. read.width/read.height approx= write.width/write.height
-         2. write.width <= max_width
-         3. write.height <= max_height
-         4. Image is large as possible */
-    write.width = max_width;
-    write.height = ROUND_DIV(write.width * read.height, read.width);
-    if (write.height > max_height) {
-        write.height = max_height;
+    /* If either width or height is -1, user is requesting
+       us to preserve the aspect ratio:
+
+       Set write.width, write.height so that:
+       1. read.width/read.height approx= write.width/write.height
+       2. write.width <= width
+       3. write.height <= height
+       4. Image is large as possible */
+    if (width == -1 && height > 0) {
+        write.height = height;
         write.width = ROUND_DIV(write.height * read.width, read.height);
+    } else if (width > 0 && height == -1) {
+        write.width = width;
+        write.height = ROUND_DIV(write.width * read.height, read.width);
+    } else if (width <= 0 || height <= 0) {
+        abort_("Invalid width/height");
+    } else {
+        write.width = width;
+        write.height = height;
     }
+
     if (write.width == 0) {
         write.width = 1;
     }
@@ -195,23 +205,15 @@ struct png_info compute_write_info(struct png_info read, int max_width, int max_
 int main(int argc, char **argv)
 {
     if (argc != 5) {
-        abort_("Usage: program_name <file_in> <file_out> <max width px> <max height px>");
+        abort_("Usage: program_name <file_in> <file_out> <width px> <height px>\n"
+               "Set either width or height to -1 to choose other to preserve aspect ratio.\n");
     }
 
-    int max_width = atoi(argv[3]);
-    int max_height = atoi(argv[4]);
-    if (max_width == -1) {
-        max_width = INT_MAX;
-    }
-    if (max_height == -1) {
-        max_height = INT_MAX;
-    }
-    if (max_width <= 0 || max_height <= 0) {
-        abort_("Invalid width/height");
-    }
+    int width = atoi(argv[3]);
+    int height = atoi(argv[4]);
 
     struct png_info read = open_read_png(argv[1]);
-    struct png_info write = compute_write_info(read, max_width, max_height);
+    struct png_info write = compute_write_info(read, width, height);
     open_write_png(argv[2], &write);
     scale_png_down(read, write);
 
