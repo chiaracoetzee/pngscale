@@ -121,8 +121,9 @@ int main(void) {
     test_large_image("test/data/antonio.png", 19203, 220, 5.0);
 #endif
 
-    /* Transparency */
+    /* Transparency - some of these aren't quite down to error 5.0 yet */
     test_basic("test/data/Abrams-transparent.png", 220, 6.0);
+    test_basic("test/data/Abrams-transparent.gray.png", 220, 15.0);
     test_basic("test/data/Abrams-transparent_palette_256.png", 220, 5.0);
     test_basic("test/data/translucent_circle.png", 220, 5.0);
 

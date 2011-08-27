@@ -42,6 +42,7 @@ static void scale_png_down(struct png_info read, struct png_info write);
 static void scale_png_down_no_alpha(struct png_info read, struct png_info write);
 static struct png_info compute_write_info(struct png_info read, int max_width, int max_height);
 int main(int argc, char **argv);
+#define has_alpha_channel(png_info) ((png_info).channels == 2 || (png_info).channels == 4)
 
 void scale_png_up(struct png_info read, struct png_info write)
 {
@@ -172,7 +173,7 @@ void scale_png_down(struct png_info read, struct png_info write)
             for (c=0; c < write.channels; c++) {
                 uint64_t value = read_ptr[c];
                 uint64_t alpha = 255;
-                if ((read.channels == 2 || read.channels == 4) && c < read.channels - 1) {
+                if (has_alpha_channel(read) && c < read.channels - 1) {
                     alpha = read_ptr[read.channels - 1];
                 }
                 write_row_sums_pointer[write.channels*write_x + c] +=
@@ -379,7 +380,7 @@ int main(int argc, char **argv)
     open_write_png(argv[2], &write);
     if (write.width > read.width || write.height > read.height) {
         scale_png_up(read, write);
-    } else if (read.channels != 4 && read.channels != 2) {
+    } else if (!has_alpha_channel(read)) {
         scale_png_down_no_alpha(read, write);
     } else {
         scale_png_down(read, write);
