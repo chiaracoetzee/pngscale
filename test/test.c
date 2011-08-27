@@ -29,14 +29,18 @@ under MIT/X11 License at http://zarb.org/~gc/html/libpng.html
 #include <unistd.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <time.h>
 
 #define TEMP_DIR  "/tmp"
 
-void sys(const char* command) {
+int sys(const char* command) {
+    time_t start_time = time(NULL);
     int return_code = system(command);
+    int seconds =  time(NULL) - start_time;
     if (return_code != 0) {
         abort_("Received nonzero return code %d from command '%s'", return_code, command);
     }
+    return seconds;
 }
 
 void assert_png_approx_equal(const char* filename_1, const char* filename_2, double max_error) {
@@ -51,22 +55,24 @@ void test_basic(const char* filename, int max_width, double max_error) {
     fflush(stdout);
     char buffer[256];
     snprintf(buffer, sizeof(buffer), "./pngscale %s " TEMP_DIR "/out.pngscale.png %d -1", filename, max_width);
-    sys(buffer);
+    int pngscale_time = sys(buffer);
     /* Requires ImageMagick convert */
     snprintf(buffer, sizeof(buffer), "convert %s -resize %d " TEMP_DIR "/out.convert.png", filename, max_width);
-    sys(buffer);
+    int convert_time = sys(buffer);
     assert_png_approx_equal(TEMP_DIR "/out.pngscale.png", TEMP_DIR "/out.convert.png", max_error);
-    printf("\n");
+    printf("pngscale: %d sec, convert: %d sec\n", pngscale_time, convert_time);
     unlink(TEMP_DIR "/out.pngscale.png");
     unlink(TEMP_DIR "/out.convert.png");
 }
 
-void test_large_image(void) {
-    printf("Creating antonio_large.png...\n");
-    sys("convert test/data/antonio.png -resize 19203 " TEMP_DIR "/antonio-large.png");
+void test_large_image(const char* filename, int upscale_width, int downscale_width, double max_error) {
+    printf("Creating out.pngscale.large.png...\n");
+    char buffer[256];
+    snprintf(buffer, sizeof(buffer), "./pngscale %s " TEMP_DIR "/out.pngscale.large.png %d -1", filename, upscale_width);
+    sys(buffer);
     printf("Doing large image test...\n");
-    test_basic(TEMP_DIR "/antonio_large.png", 220, 5.0);
-    unlink(TEMP_DIR "/antonio_large.png");
+    test_basic(TEMP_DIR "/out.pngscale.large.png", downscale_width, max_error);
+    unlink(TEMP_DIR "/out.pngscale.large.png");
 }
 
 void test_upscale(const char* filename, int downscale_width, int upscale_width, double max_error) {
@@ -109,9 +115,10 @@ int main(void) {
     test_basic("test/data/ferriero_palette_128.png", 220, 5.0);
     test_basic("test/data/ferriero_palette_256.png", 220, 5.0);
 
+    /* Fabricate a very large image to test */
 #if 0
-    /* Commented out - passes but really slow */
-    test_large_image();
+    /* Disabled: passes but too slow */
+    test_large_image("test/data/antonio.png", 19203, 220, 5.0);
 #endif
 
     /* Transparency */

@@ -39,6 +39,7 @@ under MIT/X11 License at http://zarb.org/~gc/html/libpng.html
 
 static void scale_png_up(struct png_info read, struct png_info write);
 static void scale_png_down(struct png_info read, struct png_info write);
+static void scale_png_down_no_alpha(struct png_info read, struct png_info write);
 static struct png_info compute_write_info(struct png_info read, int max_width, int max_height);
 int main(int argc, char **argv);
 
@@ -171,8 +172,8 @@ void scale_png_down(struct png_info read, struct png_info write)
             for (c=0; c < write.channels; c++) {
                 uint64_t value = read_ptr[c];
                 uint64_t alpha = 255;
-                if (read.channels >= 4 && c < 3) {
-                    alpha = read_ptr[3];
+                if ((read.channels == 2 || read.channels == 4) && c < read.channels - 1) {
+                    alpha = read_ptr[read.channels - 1];
                 }
                 write_row_sums_pointer[write.channels*write_x + c] +=
                     value * fraction_in_current_col * fraction_in_current_row * alpha / 255;
@@ -220,6 +221,105 @@ void scale_png_down(struct png_info read, struct png_info write)
             memset(write_next_row_sums_pointer, 0, sizeof(uint64_t) * write.width * write.channels);
             SWAP(read_areas, read_areas_next_row, uint64_t*);
             memset(read_areas_next_row, 0, sizeof(uint64_t) * write.width * write.channels);
+        }
+    }
+
+    close_read_png(read);
+    close_write_png(write);
+}
+
+void scale_png_down_no_alpha(struct png_info read, struct png_info write)
+{
+    int x, y, c;
+
+    /* Read and write pixels */
+    png_bytep read_row_pointer = (png_byte*) malloc(read.rowbytes);
+    if (!read_row_pointer) {
+        abort_("Failed to allocate memory to hold one row of input PNG image");
+    }
+
+    uint64_t* write_row_sums_pointer = (uint64_t*) malloc(sizeof(uint64_t) * write.width * write.channels);
+    uint64_t* write_next_row_sums_pointer = (uint64_t*) malloc(sizeof(uint64_t) * write.width * write.channels);
+    uint64_t read_area = ((uint64_t)read.width) * read.height;
+    if (!write_row_sums_pointer || !write_next_row_sums_pointer) {
+        abort_("Failed to allocate memory - need enough to hold five rows of output PNG image");
+    }
+
+    png_bytep write_row_pointer = (png_byte*) malloc(write.rowbytes);
+    if (!write_row_pointer) {
+        abort_("Failed to allocate memory to hold one row of output PNG image");
+    }
+    
+    memset(write_row_sums_pointer, 0, sizeof(uint64_t) * write.width * write.channels);
+    memset(write_next_row_sums_pointer, 0, sizeof(uint64_t) * write.width * write.channels);
+    int y_frac = 0;
+    for (y=0; y < read.height; y++) {
+        png_read_row(read.png_ptr, read_row_pointer, NULL);
+
+        int end_of_row = 0;
+        unsigned int fraction_in_current_row = write.height; /* Proportion represented by integer between 0 and write.height */
+        unsigned int fraction_in_next_row = 0;
+        y_frac += write.height;
+        if (y_frac >= read.height) {
+            /* We've reached a boundary between output image rows. */
+            end_of_row = 1;
+            y_frac -= read.height;
+            fraction_in_current_row = write.height - y_frac;
+            fraction_in_next_row = y_frac;
+        }
+
+        int write_x = 0;
+        int x_frac = 0;
+        for (x=0; x < read.width; x++) {
+            int end_of_col = 0;
+            unsigned int fraction_in_current_col = write.width; /* Proportion represented by integer between 0 and write.width */
+            unsigned int fraction_in_next_col = 0;
+            x_frac += write.width;
+            if (x_frac >= read.width) {
+                /* We've reached a boundary between output image columns. */
+                end_of_col = 1;
+                x_frac -= read.width;
+                fraction_in_current_col = write.width - x_frac;
+                fraction_in_next_col = x_frac;
+            }
+
+            png_byte* read_ptr = &(read_row_pointer[x*read.channels]);
+            for (c=0; c < write.channels; c++) {
+                uint64_t value = read_ptr[c];
+                write_row_sums_pointer[write.channels*write_x + c] +=
+                    value * fraction_in_current_col * fraction_in_current_row;
+                if (fraction_in_next_col) {
+                    write_row_sums_pointer[write.channels*(write_x + 1) + c] +=
+                        value * fraction_in_next_col * fraction_in_current_row;
+                }
+                if (fraction_in_next_row) {
+                    write_next_row_sums_pointer[write.channels*write_x + c] +=
+                        value * fraction_in_current_col * fraction_in_next_row;
+                }
+                if (fraction_in_next_col && fraction_in_next_row) {
+                    write_next_row_sums_pointer[write.channels*(write_x + 1) + c] +=
+                        value * fraction_in_next_col * fraction_in_next_row;
+                }
+            }
+
+            if (end_of_col) {
+                write_x++;
+                assert (write_x < write.width || x == read.width - 1);
+            }
+        }
+
+        if (end_of_row) {
+            for (x=0; x < write.width; x++) {
+                png_byte* write_ptr = &(write_row_pointer[x*write.channels]);
+                uint64_t* write_sums_ptr = &(write_row_sums_pointer[x*write.channels]);
+                for (c=0; c < write.channels; c++) {
+                    write_ptr[c] = ROUND_DIV(write_sums_ptr[c], read_area);
+                }
+            }
+
+            png_write_row(write.png_ptr, write_row_pointer);
+            SWAP(write_row_sums_pointer, write_next_row_sums_pointer, uint64_t*);
+            memset(write_next_row_sums_pointer, 0, sizeof(uint64_t) * write.width * write.channels);
         }
     }
 
@@ -279,6 +379,8 @@ int main(int argc, char **argv)
     open_write_png(argv[2], &write);
     if (write.width > read.width || write.height > read.height) {
         scale_png_up(read, write);
+    } else if (read.channels != 4 && read.channels != 2) {
+        scale_png_down_no_alpha(read, write);
     } else {
         scale_png_down(read, write);
     }
