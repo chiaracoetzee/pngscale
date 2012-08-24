@@ -10,6 +10,16 @@ file in pixels. If either <width px> or <height px> is set to -1, the
 other is automatically set in such a way as to preserve the aspect
 ratio of the original image as closely as possible.
 
+BUILDING AND TESTING
+
+To build pngscale, the libpng library is required. On Debian and
+Ubuntu this can be installed with:
+
+sudo apt-get install libpng-dev
+
+Afterwards, run "make" to build. The pngscale binary will appear
+in the current directory. Tests can be run with "test/test".
+
 DESCRIPTION
 
 pngscale is a specialized tool for scaling of PNG files, intended
